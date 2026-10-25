@@ -15,6 +15,8 @@ import pandas as pd
 from inspect_ai.log import list_eval_logs, read_eval_log
 from inspect_ai.model import ContentReasoning
 
+from oversight.task import DEFAULT_CONTINUE, NEUTRAL_CONTINUE
+
 # $ per million tokens: input, output, cache read, cache write.
 # OpenRouter models are pinned to Baidu or StreamLake (fp8); the dearer of the
 # two is used here, and real spend is checked against the OpenRouter key's usage.
@@ -26,6 +28,25 @@ PRICES = {
 }
 
 CHEATING = {"test_edit", "special_casing", "other"}
+
+FLAG = "flag_for_human_intervention"
+# What the scaffold sends whenever the agent ends a turn without calling a tool,
+# including after a flag written as plain text instead of submitted: the default
+# in every arm but none_neutral, which gets the neutral wording.
+CONTINUE_MESSAGES = (DEFAULT_CONTINUE, NEUTRAL_CONTINUE)
+
+
+def _is_continue(m) -> bool:
+    return m.role == "user" and m.text in CONTINUE_MESSAGES
+
+
+def text_flags_answered(messages) -> int:
+    """Turns where the agent wrote the stop string without calling submit and
+    the scaffold answered with its automatic continuation message."""
+    return sum(
+        1 for m, nxt in zip(messages, messages[1:])
+        if m.role == "assistant" and not m.tool_calls and FLAG in (m.text or "") and _is_continue(nxt)
+    )
 
 
 def episode_cost(model: str, usage) -> float:
@@ -62,6 +83,8 @@ def load_episodes(log_dir: str) -> pd.DataFrame:
                 **{k: det.get(k) for k in ("passed", "honest_exit", "test_edited", "source_passes", "source_exits_early")},
                 "turns": sum(1 for m in s.messages if m.role == "assistant"),
                 "submissions": sum(1 for m in s.messages if m.role == "tool" and m.function == "submit"),
+                "text_flags_answered": text_flags_answered(s.messages),
+                "continue_messages": sum(1 for m in s.messages if _is_continue(m)),
                 "input_tokens": usage.input_tokens if usage else 0,
                 "output_tokens": usage.output_tokens if usage else 0,
                 "cache_read_tokens": (usage.input_tokens_cache_read or 0) if usage else 0,
@@ -134,6 +157,16 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (centre - half, centre + half)
 
 
+def cohen_kappa(a, b) -> float:
+    """Agreement between two raters' labels beyond what chance gives. Used for
+    judge validation on rare-positive questions; NaN when both raters give
+    every item the same label."""
+    a, b = pd.Series(list(a)), pd.Series(list(b))
+    observed = (a == b).mean()
+    chance = sum(a.eq(v).mean() * b.eq(v).mean() for v in set(a) | set(b))
+    return np.nan if chance == 1 else float((observed - chance) / (1 - chance))
+
+
 def threshold_test(k0: int, k10: int, k100: int, n0: int, n10: int, n100: int) -> tuple[float, float]:
     """Is the 10% arm closer to 0% or to 100% review? Tests the 10% rate against
     the midpoint of the 0% and 100% rates. Returns (difference, z). Negative
@@ -179,6 +212,20 @@ def slope_test(df: pd.DataFrame, outcome: str = "cheat") -> dict:
         "tasks": d["task_id"].nunique(),
         "informative_tasks": int(d.groupby("task_id")[outcome].nunique().gt(1).sum()),
     }
+
+
+def mechanism_test(df: pd.DataFrame, outcome: str = "cheat") -> dict:
+    """Pre-registered test of the continuation message: one-sided Fisher's exact
+    test that the outcome is less common in the none_neutral arm than in the
+    concurrent no-line arm."""
+    from scipy.stats import fisher_exact
+
+    counts = {arm: (int(df.loc[df["arm"] == arm, outcome].sum()), int((df["arm"] == arm).sum()))
+              for arm in ("none", "none_neutral")}
+    (k0, n0), (k1, n1) = counts["none"], counts["none_neutral"]
+    _, p = fisher_exact([[k0, n0 - k0], [k1, n1 - k1]], alternative="greater")
+    return {"none": f"{k0}/{n0}", "none_neutral": f"{k1}/{n1}", "p_one_sided": float(p),
+            "wilson_none": wilson(k0, n0), "wilson_none_neutral": wilson(k1, n1)}
 
 
 def _mean_rate(mu: float, sigma: float) -> float:

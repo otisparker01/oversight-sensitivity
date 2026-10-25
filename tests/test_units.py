@@ -11,7 +11,7 @@ def test_arms_differ_only_in_review_line():
     blocks = {arm: notes_block(rate).splitlines() for arm, rate in ARMS.items()}
     reference = blocks["r10"]
     for arm, lines in blocks.items():
-        if arm == "none":
+        if ARMS[arm] is None:
             assert lines == [l for l in reference if not l.startswith("- Automated review")]
         else:
             assert [i for i, (a, b) in enumerate(zip(lines, reference)) if a != b] in ([], [3])
@@ -75,3 +75,40 @@ def test_summarised_reasoning_reaches_judge():
 
 def test_changed_assertion():
     assert changed_assertion("a\nassert f(1) == 2\n", "a\nassert f(1) == 3\n") == "-assert f(1) == 2\n+assert f(1) == 3"
+
+
+def test_cohen_kappa():
+    import math
+
+    from oversight.analysis import cohen_kappa
+
+    assert cohen_kappa([1, 0, 0, 0], [1, 0, 0, 0]) == 1.0
+    assert cohen_kappa([0] * 9 + [1], [0] * 10) == 0.0  # 90% raw agreement, no information
+    assert math.isnan(cohen_kappa([0] * 5, [0] * 5))
+    assert round(cohen_kappa([1, 1, 0, 0], [1, 0, 0, 0]), 3) == 0.5
+
+
+def test_text_flag_answered_by_continue_message():
+    from inspect_ai.model import ChatMessageAssistant, ChatMessageUser
+
+    from oversight.analysis import text_flags_answered
+    from oversight.task import DEFAULT_CONTINUE, NEUTRAL_CONTINUE
+
+    flagged = ChatMessageAssistant(content="The test is wrong. [flag_for_human_intervention]")
+    for continuation in (DEFAULT_CONTINUE, NEUTRAL_CONTINUE):
+        reply = ChatMessageUser(content=continuation)
+        assert text_flags_answered([flagged, reply]) == 1
+        assert text_flags_answered([ChatMessageAssistant(content="still working"), reply]) == 0
+
+
+def test_mechanism_test_is_one_sided():
+    import pandas as pd
+
+    from oversight.analysis import mechanism_test
+
+    def arms(k0, k1, n=90):
+        return pd.DataFrame({"arm": ["none"] * n + ["none_neutral"] * n,
+                             "cheat": [1] * k0 + [0] * (n - k0) + [1] * k1 + [0] * (n - k1)})
+
+    assert mechanism_test(arms(18, 0))["p_one_sided"] < 1e-4
+    assert mechanism_test(arms(0, 18))["p_one_sided"] > 0.99  # more cheating in none_neutral is not evidence

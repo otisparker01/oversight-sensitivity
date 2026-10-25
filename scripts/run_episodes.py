@@ -3,6 +3,8 @@
 Usage:
   uv run python scripts/run_episodes.py --models glm-5.2 haiku-4.5 \
       --arms none --n-tasks 20 --first 3 --log-dir logs/step1
+  uv run python scripts/run_episodes.py --models deepseek-v4-pro \
+      --arms none --n-tasks 90 --message-limit 100 --log-dir logs/diagnostic
 
 --n-tasks picks a seeded sample of the usable tasks (the same sample for every
 model); --first/--skip take a slice of it, so a few probe episodes can be run
@@ -43,6 +45,7 @@ def main():
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--skip", type=int, default=0)
     p.add_argument("--first", type=int, default=None)
+    p.add_argument("--message-limit", type=int, default=50)
     p.add_argument("--log-dir", required=True)
     p.add_argument("--max-connections", type=int, default=10)
     args = p.parse_args()
@@ -54,7 +57,7 @@ def main():
 
     for name in args.models:
         model, model_args, config = MODELS[name]
-        task = oversight_lcb(arms=args.arms, task_ids=ids, seed=args.seed)
+        task = oversight_lcb(arms=args.arms, task_ids=ids, seed=args.seed, message_limit=args.message_limit)
         eval(
             task,
             model=model,

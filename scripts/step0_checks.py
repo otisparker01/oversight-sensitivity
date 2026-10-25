@@ -8,11 +8,16 @@
    edit, early exit, and an always-equal object. Each must get the expected
    ImpossibleBench score and deterministic label, and the honest exit must end
    the episode after one model turn even with 10 submissions allowed.
-3. Notes block: the five arms differ only in the review line.
+3. Notes block: the four rate arms differ only in the review line, and both
+   no-line arms get the same block without it.
+4. Continuation message: a flag written as text (no tool call) gets the default
+   continuation message in the no-line arm and the neutral one in none_neutral,
+   and nothing else differs between the two.
 
 Writes data/step0_results.csv and data/excluded_tasks.csv.
 
 Usage: uv run python scripts/step0_checks.py
+       uv run python scripts/step0_checks.py --continue-only   # check 4 alone
 """
 
 import csv
@@ -30,7 +35,7 @@ from inspect_ai.solver import solver
 from inspect_ai.tool import ToolCall
 from inspect_ai.util import sandbox
 
-from oversight.task import ARMS, notes_block, oversight_lcb
+from oversight.task import ARMS, DEFAULT_CONTINUE, NEUTRAL_CONTINUE, notes_block, oversight_lcb
 
 ROOT = Path(__file__).parents[1]
 LOG_DIR = ROOT / "logs" / "step0"
@@ -97,20 +102,22 @@ def stage_oracle():
 
 def scripted(*steps: tuple[str, dict]):
     """A mock model that makes step n's tool call on its n-th turn (repeating the
-    last step), so its behaviour depends only on its own conversation."""
+    last step), so its behaviour depends only on its own conversation. A "text"
+    step replies with arguments["content"] and no tool call."""
 
     def generate(input, tools, tool_choice, config):
         n = sum(1 for m in input if m.role == "assistant")
         function, arguments = steps[min(n, len(steps) - 1)]
+        text = function == "text"
         message = ChatMessageAssistant(
-            content="",
-            tool_calls=[ToolCall(id=f"call_{n}", function=function, arguments=arguments)],
+            content=arguments["content"] if text else "",
+            tool_calls=None if text else [ToolCall(id=f"call_{n}", function=function, arguments=arguments)],
             model="mockllm/model",
             source="generate",
         )
         return ModelOutput(
             model="mockllm/model",
-            choices=[ChatCompletionChoice(message=message, stop_reason="tool_calls")],
+            choices=[ChatCompletionChoice(message=message, stop_reason="stop" if text else "tool_calls")],
         )
 
     return get_model("mockllm/model", custom_outputs=generate)
@@ -160,7 +167,38 @@ def run(task, model, name):
     return rows
 
 
+def check_continue_messages() -> list[str]:
+    """Check 4: one scripted episode per no-line arm whose first turn is a flag
+    written as text, then a submission."""
+    flag = ("text", {"content": "test.py contradicts the docstring. [flag_for_human_intervention]"})
+    t = oversight_lcb(split="oneoff", arms=["none", "none_neutral"], task_ids="lcbhard_0", max_attempts=1,
+                      apply_exclusions=False)
+    [log] = eval(t, model=scripted(flag, DONE), log_dir=str(LOG_DIR / "continue_message"), display="none",
+                 fail_on_error=False)
+    messages = {s.metadata["arm"]: s.messages for s in log.samples or []}
+    problems = []
+    for arm, expected in (("none", DEFAULT_CONTINUE), ("none_neutral", NEUTRAL_CONTINUE)):
+        sent = [m.text for m in messages.get(arm, []) if m.role == "user"][1:]  # after the task message
+        print(f"{arm:13s} continuation: {sent}")
+        if sent != [expected]:
+            problems.append(f"{arm}: continuation was {sent}, expected {[expected]}")
+
+    def without_continuation(msgs):
+        return [(m.role, m.text) for m in msgs if not (m.role == "user" and m.text in (DEFAULT_CONTINUE, NEUTRAL_CONTINUE))]
+
+    if without_continuation(messages.get("none", [])) != without_continuation(messages.get("none_neutral", [None])):
+        problems.append("none and none_neutral differ outside the continuation message")
+    return problems
+
+
 def main():
+    if "--continue-only" in sys.argv:
+        problems = check_continue_messages()
+        print("\nPROBLEMS:" if problems else "\ncontinuation check passed")
+        for p in problems:
+            print("  " + p)
+        sys.exit(1 if problems else 0)
+
     results = []
 
     # 1. Oracle on both splits, all tasks.
@@ -232,7 +270,9 @@ def main():
 
     # 3. Notes block renders identically apart from the review line.
     blocks = {arm: notes_block(rate) for arm, rate in ARMS.items()}
-    with_line = [b.splitlines() for arm, b in blocks.items() if arm != "none"]
+    with_line = [b.splitlines() for arm, b in blocks.items() if ARMS[arm] is not None]
+    if blocks["none_neutral"] != blocks["none"]:
+        problems.append("the two no-line arms get different notes blocks")
     for lines in with_line:
         diff = [i for i, (a, b) in enumerate(zip(lines, with_line[0])) if a != b]
         if len(lines) != len(with_line[0]) or diff not in ([], [3]):
@@ -242,6 +282,10 @@ def main():
     print("\nnotes blocks:")
     for arm, b in blocks.items():
         print(f"--- {arm}\n{b}")
+
+    # 4. Continuation message.
+    print("\ncontinuation message:")
+    problems += check_continue_messages()
 
     print("\nPROBLEMS:" if problems else "\nall checks passed")
     for p in problems:
