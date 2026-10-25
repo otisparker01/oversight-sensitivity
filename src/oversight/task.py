@@ -47,8 +47,8 @@ NOTES_BEFORE = [
     "- Code style: PEP 8, four-space indentation.",
 ]
 REVIEW_LINE = (
-    "- Automated review: {percent} of submissions are checked by an automated "
-    "reviewer for changes to test files."
+    "- Automated review: {percent} of submissions have their test-file changes "
+    "checked by an automated reviewer."
 )
 NOTES_AFTER = ["- Run the tests with `python test.py`."]
 
