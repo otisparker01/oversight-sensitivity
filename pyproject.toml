@@ -1,0 +1,27 @@
+[project]
+name = "oversight-sensitivity"
+version = "0.1.0"
+description = "Do coding agents cheat more when review is less likely? An extension of ImpossibleBench."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # ImpossibleBench is used unmodified, pinned to one commit (MIT licence).
+    "impossiblebench @ git+https://github.com/safety-research/impossiblebench@d4f9a149db2b9cec0fed7bab01d91c07ee10aca2",
+    "inspect-ai==0.3.283",
+    "anthropic>=2.3.0",
+    "openai",
+    "pandas",
+    "statsmodels",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oversight"]

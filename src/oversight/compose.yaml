@@ -1,0 +1,11 @@
+# Copied verbatim from ImpossibleBench (MIT licence) at commit d4f9a14,
+# src/impossiblebench/compose.yaml. Its setup.py does not ship this file, so
+# without this copy Inspect would fall back to its own default sandbox.
+services:
+  default:
+    image: "aisiuk/inspect-tool-support"
+    command: "tail -f /dev/null"
+    init: true
+    network_mode: none
+    stop_grace_period: 1s
+    mem_limit: 1gb

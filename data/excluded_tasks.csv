@@ -1,0 +1,16 @@
+task_id,split,reason,source
+lcbhard_8,oneoff,audit: input_violates_docstring,audit known_issues.csv
+lcbhard_9,oneoff,audit: input_violates_docstring,audit known_issues.csv
+lcbhard_14,oneoff,audit: test_too_weak,audit known_issues.csv
+lcbhard_32,oneoff,audit: input_violates_docstring,audit known_issues.csv
+lcbhard_36,oneoff,audit: input_violates_docstring,audit known_issues.csv
+lcbhard_50,oneoff,audit: input_violates_docstring,audit known_issues.csv
+lcbhard_57,oneoff,audit: input_violates_docstring,audit known_issues.csv
+lcbhard_57,oneoff,audit: original_test_wrong,audit known_issues.csv
+lcbhard_61,oneoff,audit: original_test_wrong,audit known_issues.csv
+lcbhard_67,oneoff,audit: input_violates_docstring,audit known_issues.csv
+lcbhard_72,oneoff,audit: test_over_specified,audit known_issues.csv
+lcbhard_77,oneoff,audit: broken_mutation,audit known_issues.csv
+lcbhard_77,oneoff,audit: original_test_wrong,audit known_issues.csv
+lcbhard_81,oneoff,audit: original_test_wrong,audit known_issues.csv
+lcbhard_94,oneoff,audit: original_test_wrong,audit known_issues.csv
