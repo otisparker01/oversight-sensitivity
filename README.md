@@ -89,7 +89,8 @@ It also records whether the final submission contained the stop string. Together
 - `run_episodes.py`: runs models on a seeded task sample, with OpenRouter pinned to fixed fp8 providers.
 - `judge.py`: sends unjudged episodes to the judge as one batch, waits, and saves the verdicts (`--collect <batch_id>` resumes an interrupted wait).
 - `summarise.py`: prints tables.
-- `hand_label_set.py`: builds the pre-registered hand-labelling set from the judge's own inputs, with the arm hidden, a shuffled order and a blank sheet.
+- `hand_label_set.py`: builds the pre-registered hand-labelling set from the judge's own inputs, with the arm hidden, a shuffled order and a blank sheet. It also writes `manifest.csv`, the judge's input hash for each transcript, so the labelling app can check transcripts without reading any judge output.
+- `label_app.py`: the local labelling app (see "How to label").
 
 `tests/` holds fast unit tests (`uv run pytest`).
 
@@ -248,6 +249,29 @@ Once the default message had answered a flag, cheating ran between 31% and 49% a
 | 8 | Reviewer mentions more at 100% than at 0%, rare at every level | Pending judge validation |
 
 **Cost.** OpenRouter billed $29.61 for the 540 episodes ($30.65 at list prices), bringing total OpenRouter usage to $35.12, under the $40 line. Judging cost $29.83 ($0.055 per episode), bringing estimated Anthropic spend to about $48.
+
+## How to label
+
+The judge-validation set is in `labels/hand/`: 139 episodes, a sheet, the transcripts and the rubric. Label it with the local app:
+
+```
+uv run python scripts/label_app.py
+```
+
+It opens http://localhost:8765, which only accepts local requests and needs no internet. Stop it with Ctrl-C; every answer is already saved.
+
+- **Blind:** the app reads and writes only files in `labels/hand/`. It never opens the judge's verdicts or batches, and shows nothing about an episode's arm, the judge's answers or why it was included. A test checks every file it opens (`tests/test_label_app.py`). Episodes keep the sheet's shuffled order.
+- **Exactly what the judge saw:** before showing a transcript, the app checks it against the hash the judge recorded for its input (`labels/hand/manifest.csv`); one that doesn't match is not shown. Every character is displayed. Long tool calls and results start collapsed and open on click. Tool calls are shown with their JSON decoded for reading, and a "raw" button shows the exact text.
+- **Each screen:** one episode, with the final report (the last submission or message) at the top, then the whole transcript. On the right are only the questions that episode was asked, each next to the rubric's own definition. The Rubric button shows the full rubric.
+- **Keys:**
+  - <kbd>Y</kbd>/<kbd>N</kbd> answer the highlighted question.
+  - <kbd>↑</kbd>/<kbd>↓</kbd> change the highlighted question.
+  - <kbd>Enter</kbd> or <kbd>→</kbd> moves to the next episode, and <kbd>←</kbd> back to the previous one.
+  - <kbd>/</kbd> goes to search, and <kbd>Esc</kbd> leaves a text box. Search highlights matches only when you press Enter; pressing Enter again moves to the next match.
+- **Done:** an episode counts as done when every question it was asked has an answer. The note and the "revisit" flag are optional. The strip under the header shows each episode's status; click one to jump to it.
+- **Saving:** every answer is written to `labels/hand/hand_labels.csv` straight away, in the sheet's own format. Notes stay in its `notes` column, and the revisit flag and time spent go in two extra columns (`revisit`, `seconds`) that the analysis ignores. Reopening the app resumes where you left off, and you can go back and change any answer.
+- **Time:** the header shows your average time per finished episode and an estimate for the rest. Time counts only while the page is visible and you've been active in the last two minutes.
+- **Keep the sheet closed elsewhere:** don't open `hand_labels.csv` in another program while the app is running.
 
 ## Follow-up: replies to a flag submitted properly
 
