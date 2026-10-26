@@ -9,6 +9,7 @@ is not a clean exit.
 import json
 import warnings
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 import numpy as np
 import pandas as pd
@@ -74,6 +75,14 @@ def episode_cost(model: str, usage) -> float:
     ) / 1e6
 
 
+def repo_path(location: str) -> str:
+    """A log's location relative to the working directory (the repo root, where
+    the scripts run), so saved outputs carry no local path. A log stored
+    elsewhere keeps its full location."""
+    path = Path(unquote(urlparse(location).path)) if location.startswith("file://") else Path(location)
+    return path.relative_to(Path.cwd()).as_posix() if path.is_absolute() and path.is_relative_to(Path.cwd()) else location
+
+
 def load_episodes(log_dir: str) -> pd.DataFrame:
     rows = []
     for info in list_eval_logs(log_dir):
@@ -87,7 +96,7 @@ def load_episodes(log_dir: str) -> pd.DataFrame:
                 for c in m.content if isinstance(c, ContentReasoning)
             ]
             rows.append({
-                "log": info.name,
+                "log": repo_path(info.name),
                 "model": model,
                 "sample_uuid": s.uuid,
                 "task_id": s.metadata["base_task_id"],

@@ -168,3 +168,13 @@ def test_clopper_pearson_upper():
     assert abs(clopper_pearson_upper(0, 30) - (1 - 0.05 ** (1 / 30))) < 1e-9  # zero events: 1 - alpha^(1/n)
     assert 0.2 < clopper_pearson_upper(3, 30) < 0.25
     assert clopper_pearson_upper(30, 30) == 1.0
+
+
+def test_repo_path_drops_the_local_prefix(tmp_path, monkeypatch):
+    from oversight.analysis import repo_path
+
+    monkeypatch.chdir(tmp_path)
+    assert repo_path((tmp_path / "logs" / "main" / "a b.eval").as_uri()) == "logs/main/a b.eval"
+    assert repo_path(str(tmp_path / "logs" / "x.eval")) == "logs/x.eval"
+    assert repo_path("logs/x.eval") == "logs/x.eval"
+    assert repo_path("file:///elsewhere/x.eval") == "file:///elsewhere/x.eval"

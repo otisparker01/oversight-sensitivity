@@ -29,6 +29,7 @@ import anthropic
 from inspect_ai.log import EvalSample, read_eval_log
 from inspect_ai.model import ContentReasoning, ContentText
 
+from oversight.analysis import repo_path
 from oversight.task import notes_block
 
 # A fixed snapshot: the Models API lists no dated variant of this ID.
@@ -189,7 +190,7 @@ def submit(log_paths: list[str], out_dir: str = "labels") -> str | None:
             key = hashlib.sha1(s.uuid.encode()).hexdigest()[:12]
             (out / "transcripts" / f"{key}.md").write_text(text)
             jobs.append({
-                "custom_id": key, "sample_uuid": s.uuid, "log": str(path), "model": log.eval.model,
+                "custom_id": key, "sample_uuid": s.uuid, "log": repo_path(str(path)), "model": log.eval.model,
                 "sample_id": s.id, "label": label, "questions": groups,
                 "input_sha1": hashlib.sha1(text.encode()).hexdigest(),
             })
