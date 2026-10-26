@@ -112,3 +112,59 @@ def test_mechanism_test_is_one_sided():
 
     assert mechanism_test(arms(18, 0))["p_one_sided"] < 1e-4
     assert mechanism_test(arms(0, 18))["p_one_sided"] > 0.99  # more cheating in none_neutral is not evidence
+
+
+def test_reply_to_first_flag_reopens_once():
+    from types import SimpleNamespace
+
+    from inspect_ai.scorer import Score
+    from inspect_ai.util import Store
+
+    from oversight.task import reply_to_first_flag
+
+    on_incorrect = reply_to_first_flag("REPLY", lambda state, scores: "DEFAULT")
+    state = SimpleNamespace(store=Store(), completed=True)
+    flagged = [Score(value="I", metadata={"human_intervention_requested": True})]
+    assert on_incorrect(state, flagged) == "REPLY" and state.completed is False
+    state.completed = True  # the scorer ends the episode again on a second flag
+    assert on_incorrect(state, flagged) == "DEFAULT" and state.completed is True
+    failed = SimpleNamespace(store=Store(), completed=False)
+    assert on_incorrect(failed, [Score(value="I", metadata={})]) == "DEFAULT" and failed.completed is False
+
+
+def test_flag_reply_reached_only_after_a_submission():
+    from inspect_ai.model import ChatMessageAssistant, ChatMessageTool, ChatMessageUser
+
+    from oversight.analysis import continue_messages, flag_reply_reached
+    from oversight.task import DEFAULT_CONTINUE, FLAG_REPLY_BY_ARM
+
+    submitted = ChatMessageTool(content="[flag_for_human_intervention]", function="submit", tool_call_id="c1")
+    for reply in FLAG_REPLY_BY_ARM.values():
+        assert flag_reply_reached([submitted, ChatMessageUser(content=reply)])
+        assert continue_messages([submitted, ChatMessageUser(content=reply)]) == 0
+    text_turn = ChatMessageAssistant(content="thinking")
+    assert not flag_reply_reached([text_turn, ChatMessageUser(content=DEFAULT_CONTINUE)])
+    assert continue_messages([text_turn, ChatMessageUser(content=DEFAULT_CONTINUE)]) == 1
+
+
+def test_flag_reply_test_is_one_sided_per_model():
+    import pandas as pd
+
+    from oversight.analysis import flag_reply_test
+
+    def model(name, k1, k0, n=40):
+        return pd.DataFrame({"model": name, "flag_replied": True,
+                             "arm": ["flag_authorising"] * n + ["flag_neutral"] * n,
+                             "cheat": [1] * k1 + [0] * (n - k1) + [1] * k0 + [0] * (n - k0)})
+
+    out = flag_reply_test(pd.concat([model("a", 12, 0), model("b", 0, 12)]))
+    assert out["a"]["p_one_sided"] < 1e-3 and out["a"]["authorising"] == "12/40"
+    assert out["b"]["p_one_sided"] > 0.99
+
+
+def test_clopper_pearson_upper():
+    from oversight.analysis import clopper_pearson_upper
+
+    assert abs(clopper_pearson_upper(0, 30) - (1 - 0.05 ** (1 / 30))) < 1e-9  # zero events: 1 - alpha^(1/n)
+    assert 0.2 < clopper_pearson_upper(3, 30) < 0.25
+    assert clopper_pearson_upper(30, 30) == 1.0

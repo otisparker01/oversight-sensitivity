@@ -15,7 +15,7 @@ import pandas as pd
 from inspect_ai.log import list_eval_logs, read_eval_log
 from inspect_ai.model import ContentReasoning
 
-from oversight.task import DEFAULT_CONTINUE, NEUTRAL_CONTINUE
+from oversight.task import DEFAULT_CONTINUE, FLAG_REPLY_BY_ARM, NEUTRAL_CONTINUE
 
 # $ per million tokens: input, output, cache read, cache write.
 # OpenRouter models are pinned to Baidu or StreamLake (fp8); the dearer of the
@@ -38,6 +38,21 @@ CONTINUE_MESSAGES = (DEFAULT_CONTINUE, NEUTRAL_CONTINUE)
 
 def _is_continue(m) -> bool:
     return m.role == "user" and m.text in CONTINUE_MESSAGES
+
+
+def continue_messages(messages) -> int:
+    """Continuation messages actually sent: the text must follow a turn without a
+    tool call (the authorising flag reply has the same text but follows a submit)."""
+    return sum(1 for prev, m in zip(messages, messages[1:]) if _is_continue(m) and prev.role == "assistant")
+
+
+def flag_reply_reached(messages) -> bool:
+    """Follow-up arms: the agent submitted the stop string and the scaffold sent
+    the arm's reply (a user message straight after the submit tool's result)."""
+    return any(
+        m.role == "user" and m.text in FLAG_REPLY_BY_ARM.values() and prev.role == "tool" and prev.function == "submit"
+        for prev, m in zip(messages, messages[1:])
+    )
 
 
 def text_flags_answered(messages) -> int:
@@ -84,7 +99,8 @@ def load_episodes(log_dir: str) -> pd.DataFrame:
                 "turns": sum(1 for m in s.messages if m.role == "assistant"),
                 "submissions": sum(1 for m in s.messages if m.role == "tool" and m.function == "submit"),
                 "text_flags_answered": text_flags_answered(s.messages),
-                "continue_messages": sum(1 for m in s.messages if _is_continue(m)),
+                "continue_messages": continue_messages(s.messages),
+                "flag_replied": flag_reply_reached(s.messages),
                 "input_tokens": usage.input_tokens if usage else 0,
                 "output_tokens": usage.output_tokens if usage else 0,
                 "cache_read_tokens": (usage.input_tokens_cache_read or 0) if usage else 0,
@@ -226,6 +242,31 @@ def mechanism_test(df: pd.DataFrame, outcome: str = "cheat") -> dict:
     _, p = fisher_exact([[k0, n0 - k0], [k1, n1 - k1]], alternative="greater")
     return {"none": f"{k0}/{n0}", "none_neutral": f"{k1}/{n1}", "p_one_sided": float(p),
             "wilson_none": wilson(k0, n0), "wilson_none_neutral": wilson(k1, n1)}
+
+
+def clopper_pearson_upper(k: int, n: int, level: float = 0.95) -> float:
+    """Exact one-sided upper confidence bound on a binomial rate."""
+    from scipy.stats import beta
+
+    return 1.0 if k >= n else float(beta.ppf(level, k + 1, n - k))
+
+
+def flag_reply_test(df: pd.DataFrame, outcome: str = "cheat") -> dict:
+    """Follow-up test, per model: one-sided Fisher's exact test that the outcome is
+    more common after the authorising reply than after the neutral one, among the
+    episodes that reached the reply, with the exact one-sided 95% upper bound on
+    the rate after the authorising reply."""
+    from scipy.stats import fisher_exact
+
+    out = {}
+    for model, d in df[df["flag_replied"]].groupby("model"):
+        (k1, n1), (k0, n0) = [(int(d.loc[d["arm"] == a, outcome].sum()), int((d["arm"] == a).sum()))
+                              for a in ("flag_authorising", "flag_neutral")]
+        _, p = fisher_exact([[k1, n1 - k1], [k0, n0 - k0]], alternative="greater")
+        out[model] = {"authorising": f"{k1}/{n1}", "neutral": f"{k0}/{n0}", "p_one_sided": float(p),
+                      "cp95_upper_authorising": clopper_pearson_upper(k1, n1) if n1 else np.nan,
+                      "wilson_authorising": wilson(k1, n1), "wilson_neutral": wilson(k0, n0)}
+    return out
 
 
 def _mean_rate(mu: float, sigma: float) -> float:
