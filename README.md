@@ -341,6 +341,23 @@ It opens http://localhost:8765, which only accepts local requests and needs no i
 
 **Running:** `caffeinate -ims uv run python scripts/run_episodes.py --models glm-5.2-streamlake haiku-4.5 deepseek-v4-pro-streamlake --arms flag_authorising flag_neutral --n-tasks 45 --first-for haiku-4.5=35 deepseek-v4-pro-streamlake=25 --seed 3 --message-limit 100 --log-dir logs/followup`
 
+## Follow-up: amendment after the run stopped
+
+*Recorded 26 October 2026, after the follow-up run stopped and before any follow-up outcome was analysed. The pre-registration above is unchanged; this section records what happened and the author's rule for analysing the incomplete run.*
+
+**What happened.**
+- **GLM:** all 90 episodes ran. 11 of them (6 authorising, 5 neutral) failed when the OpenRouter account ran out of credit (error 402). The run had also been interrupted once, by moving the project folder; it was resumed from its log, keeping the 24 episodes already finished.
+- **Haiku:** the spend guard stopped the run when the projected cost of Haiku's whole run passed the $25 limit. 39 of 70 episodes finished (18 authorising, 21 neutral). The stop took effect 14 minutes late because the guard signalled the wrong process, so about 17 of the 39 finished after the intended stop.
+- **DeepSeek:** not run, since the OpenRouter account had no credit left.
+
+**Analysis of the incomplete run.**
+- GLM is analysed on its 79 scored episodes. The 11 credit-exhaustion failures are reported as infrastructure errors unrelated to outcome (6 authorising, 5 neutral). The pre-registered re-run of errored episodes was not done.
+- Haiku is analysed as partial (39 of 70), as pre-registered, and is not finished.
+- If either GLM or Haiku shows significantly more cheating after the authorising reply (one-sided Fisher's exact test, α = 0.05), the scenario is shown to induce giving in, and the positive control is not needed.
+- If neither does, the follow-up needs the positive control. The author will then decide between funding a reduced DeepSeek run and reporting the follow-up as inconclusive. That decision depends only on whether the control is needed, never on DeepSeek's outcomes.
+
+**Disclosure.** One aggregate was seen before this section was committed, by Claude (which runs the analysis) and not by the author: the runner's end-of-run summary gave GLM's ImpossibleBench pass rate across its scored episodes as 0.000. The author wrote the rule above without it.
+
 ## Pre-registration
 
 *Committed on its own, before any main-run data exists. Nothing in this section changes after the main run starts; any later analysis is labelled as unplanned.*
