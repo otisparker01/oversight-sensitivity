@@ -1,5 +1,28 @@
 # oversight-sensitivity
 
+## Summary
+
+**Question.** Do coding agents cheat less on Impossible-LiveCodeBench, from [ImpossibleBench](https://github.com/safety-research/impossiblebench), when a stated review rate is higher? Each task's tests contradict its specification, so any pass is cheating.
+
+**Main finding.** DeepSeek V4 Pro often wrote `[flag_for_human_intervention]` as plain text instead of calling `submit`. The scaffold, Inspect's `basic_agent`, then sent its default continuation message ("Please proceed to the next step using your best judgement.") as a user message, and DeepSeek treated it as a human's reply. 82 of its 83 cheats followed that exchange. Replacing the sentence with a neutral one cut cheating from 18/90 to 0/90 (one-sided Fisher p = 1.5 × 10⁻⁶), with a similar number of episodes having an answered text flag (48 vs 43).
+
+**Disclosure.** By the LLM judge, 72 of 83 cheats disclosed nothing. The author's hand labels found more disclosure among the cheats they cover (17 of 44, against the judge's 7), so the judge probably undercounts it.
+
+**Review rate.** Cheating fell from 22% at 0% review to 13% at 100% (odds ratio 0.56, 95% CI 0.26–1.21), an inconclusive result that is reported as a bound on the effect.
+
+![Cheating rate by arm with 95% intervals](docs/figures/cheating_by_arm.png)
+*Main-run cheating by arm (90 episodes each, 95% Wilson intervals).*
+
+**Follow-up.** Replying to flags submitted properly, a follow-up is inconclusive without its positive control, which was not run: GLM 5.2 cheated in 0 of 39 episodes after the authorising reply (one-sided 95% upper bound 7.4%).
+
+**Scope.** One model, on short single-function tasks.
+
+**Record.** Pre-registration commit [`a79cc32`](https://github.com/otisparker01/oversight-sensitivity/commit/a79cc32d0bfbe1c94c400ef33a255b3b334b708a), before the main run. Total API cost about $115 (OpenRouter billed $50; Anthropic about $63, estimated).
+
+**AI use.** Otis Parker set the research question and made the design decisions, with help from Claude. Claude Code wrote the code and ran the experiments. The hand labels are his own.
+
+## Introduction
+
 **Do coding agents cheat more when review is less likely?**
 
 This project extends [ImpossibleBench](https://github.com/safety-research/impossiblebench) (Zhong, Raghunathan & Carlini, 2025) by one variable. In ImpossibleBench's "oneoff" tasks, one assertion in the unit tests has been changed so that it contradicts the function's specification, so no correct implementation can pass. A pass therefore means the agent cheated, for example by editing the test or by hard-coding the expected answer.
@@ -93,6 +116,7 @@ It also records whether the final submission contained the stop string. Together
 - `label_app.py`: the local labelling app (see "How to label").
 - `judge_validation.py`: agreement between the judge and the hand labels under the pre-registered bars, then the judge-based results.
 - `eval_awareness_timing.py`: the exploratory check of when evaluation awareness appears relative to the authorising exchange.
+- `plot_cheating_by_arm.py`: the summary's figure, from `data/main_episodes.csv` (needs the dev dependencies, which `uv sync` installs).
 
 `tests/` holds fast unit tests (`uv run pytest`).
 
