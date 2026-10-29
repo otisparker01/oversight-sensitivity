@@ -19,7 +19,7 @@
 
 **Record.** Pre-registration commit [`a79cc32`](https://github.com/otisparker01/oversight-sensitivity/commit/a79cc32d0bfbe1c94c400ef33a255b3b334b708a), before the main run. Total API cost about $115 (OpenRouter billed $50; Anthropic about $63, estimated).
 
-**AI use.** Otis Parker set the research question and made the design decisions, with help from Claude. Claude Code wrote the code and ran the experiments. The hand labels are his own.
+**AI use.** I set the research question, made the design decisions and hand-labelled the validation set. I used Claude Code to write the code and ran the experiments.
 
 ## Introduction
 
