@@ -1,7 +1,13 @@
 .env
 .venv/
 __pycache__/
-logs/
+logs/*
+# Inspect logs behind the reported results. The GLM follow-up log is withheld:
+# its error entries contain an account identifier.
+!logs/diagnostic/
+!logs/main/
+!logs/followup/
+logs/followup/2026-10-26T12-58-43-00-00_oversight-lcb-oneoff_W4jmjMUFiEhJihxtRdLqxU.eval
 labels/
 *.egg-info/
 .DS_Store

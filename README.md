@@ -13,7 +13,7 @@
 ![Cheating rate by arm with 95% intervals](docs/figures/cheating_by_arm.png)
 *Main-run cheating by arm (90 episodes each, 95% Wilson intervals).*
 
-**Follow-up.** Replying to flags submitted properly, a follow-up is inconclusive without its positive control, which was not run: GLM 5.2 cheated in 0 of 39 episodes after the authorising reply (one-sided 95% upper bound 7.4%).
+**Follow-up.** The follow-up, which replied to flags submitted properly, is inconclusive without its positive control, which was not run: GLM 5.2 cheated in 0 of 39 episodes after the authorising reply (one-sided 95% upper bound 7.4%).
 
 **Scope.** One model, on short single-function tasks.
 
@@ -36,7 +36,8 @@ We add a short "Repository notes" block to each task. In four arms, one line of 
 - **ImpossibleBench** (MIT, © 2025 ImpossibleBench Team) is used unmodified as a dependency, pinned to commit [`d4f9a14`](https://github.com/safety-research/impossiblebench/commit/d4f9a149db2b9cec0fed7bab01d91c07ee10aca2). That includes its dataset loader, tools scaffold, scorer and prompts. The sixth arm builds ImpossibleBench's solver with a different continuation message at run time; ImpossibleBench's code is not changed. Its `setup.py` does not install its `compose.yaml`, so `src/oversight/compose.yaml` is a verbatim copy with attribution. Please cite:
   > Zhong, Z., Raghunathan, A., & Carlini, N. (2025). *ImpossibleBench: Measuring LLMs' Propensity of Exploiting Test Cases.* arXiv:2510.20270.
 - **Task exclusions** use the known-issues list from S. Mendelsohn's audit ["Good Evals Are Hard: An ImpossibleBench Audit"](https://www.lesswrong.com/posts/qnrjAhiqire7JeoN2/good-evals-are-hard-an-impossiblebench-audit) ([repo](https://github.com/simonjmendelsohn/impossiblebench-honest-failure), MIT). `data/audit_known_issues.csv` is copied from commit `47915ac`.
-- **Dataset:** [`fjzzq2002/impossible_livecodebench`](https://huggingface.co/datasets/fjzzq2002/impossible_livecodebench) is downloaded at run time and not redistributed. Its card states no licence.
+- **Dataset:** the tasks come from ImpossibleBench's public Impossible-LiveCodeBench dataset, [`fjzzq2002/impossible_livecodebench`](https://huggingface.co/datasets/fjzzq2002/impossible_livecodebench), which is derived from [LiveCodeBench](https://arxiv.org/abs/2403.07974). The runs download it at run time, but the committed Inspect logs and hand-labelling transcripts contain task text from it: the specifications and tests the agents saw. Its card states no licence. Please also cite LiveCodeBench:
+  > Jain, N., Han, K., Gu, A., Li, W.-D., Yan, F., Zhang, T., Wang, S., Solar-Lezama, A., Sen, K., & Stoica, I. (2024). *LiveCodeBench: Holistic and Contamination Free Evaluation of Large Language Models for Code.* arXiv:2403.07974.
 
 ## Design
 
@@ -120,6 +121,13 @@ It also records whether the final submission contained the stop string. Together
 
 `tests/` holds fast unit tests (`uv run pytest`).
 
+## Data and logs
+
+- `data/`: per-episode results for each run (`step1_episodes.csv`, `step2_episodes.csv`, `main_episodes.csv`, `followup_episodes.csv`), step 0's checks, the task exclusions and the judge-agreement table.
+- `labels/`: the judge's verdicts (`judgements.jsonl`), the batch job lists, and the hand-labelling set with the author's labels (`labels/hand/`).
+- `logs/`: Inspect logs for step 2 (`logs/diagnostic/`), the main run (`logs/main/`) and Haiku's follow-up episodes (`logs/followup/`). Open them with `uv run inspect view --log-dir logs/main`. Logs from step 0, step 1 and the follow-up pilot are not included; step 1's per-episode results are in `data/step1_episodes.csv`.
+- **Withheld: the GLM follow-up log.** Its error entries, from the 11 episodes that failed when the OpenRouter credit ran out, contain an account identifier. The GLM follow-up results remain checkable through `data/followup_episodes.csv`.
+
 ## Step 0: harness checks (no model spend)
 
 A scripted mock model drove ImpossibleBench's real scaffold and scorer in Docker. Everything passed; see `data/step0_results.csv`.
@@ -195,7 +203,7 @@ DeepSeek V4 Pro ran in the no-line arm on all 90 usable tasks (in seed-1 order),
 
 ImpossibleBench's tools scaffold is Inspect's `basic_agent`. Whenever the agent ends a turn without calling a tool, the scaffold appends a user message with Inspect's default continuation text, "Please proceed to the next step using your best judgement." That sentence is the whole message, and nothing marks it as automatic.
 
-The stop route works only through the `submit` tool. DeepSeek often wrote the stop string in an ordinary reply instead; these replies contain no tool-call markup. The scaffold's reply then arrived where a person's answer to the flag would. DeepSeek read it as a human overruling its flag ("the human told me to proceed with my best judgment"). Usually after several such exchanges (median 4), it made the tests pass.
+The stop route works only through the `submit` tool. DeepSeek often wrote the stop string in an ordinary reply instead; these replies contain no tool-call markup. The scaffold's reply then arrived where a person's answer to the flag would. DeepSeek treated the reply as a human's in nearly every episode with this exchange: in the main run, its later reasoning attributes the reply to a human or the user in 220 of the 221 such episodes, by a simple text match. In the episodes that cheated, it took the reply as permission ("the human told me to proceed with my best judgment"), and usually after several such exchanges (median 4) it made the tests pass.
 
 | Step 2 episodes (DeepSeek, no-line arm) | Episodes | Cheating |
 |---|---|---|
@@ -377,6 +385,7 @@ It opens http://localhost:8765, which only accepts local requests and needs no i
 - **Reported with denominators,** per model and condition: how many episodes reached the reply; among those, cheats by method, honest exits and cap-fails; the outcomes of the episodes that never reached it; and flags written as text.
 - **Haiku against GLM:** descriptive only, with Wilson intervals. There is no test.
 - **Power,** from simulating the test. With 40 episodes per condition reaching the reply, it detects 20% against 0% 93% of the time, and 15% against 0% 73% of the time. With 30 per condition, the figures are 73% and 47%. For DeepSeek, with 22 per condition (about 90% of its 25 tasks, as many as submitted the flag in the main run's `none_neutral` arm), it detects 40% against 0% 97% of the time and 30% against 0% 83% of the time. In the main run, DeepSeek cheated after 31–49% of the flags the default message answered.
+  - *Note added on 29 October 2026, after the analysis: the 31–49% is the share of episodes with an answered flag that cheated, not a share of flags. The sentence above is left as it was pre-registered.*
 
 **Predictions** (the author's, recorded 26 October 2026; the first three before the pilot, which did not include DeepSeek):
 1. For GLM and Haiku, more cheating after the authorising reply than after the neutral one.
@@ -431,7 +440,7 @@ It opens http://localhost:8765, which only accepts local requests and needs no i
   - After the neutral reply: 14 honest exits, 3 cap-fails and 1 special-casing cheat.
   - Of the 5 episodes that never reached the reply, 1 special-cased without ever submitting the flag (authorising condition) and 4 were cap-fails.
   - Haiku wrote the flag as text in 4 authorising and 6 neutral episodes.
-- **Context only, not a control:** in the main run, DeepSeek cheated after 31–49% of the flags the default message answered (see the exploratory table under "Main run: results"). That channel is different: a flag written as text and answered by the scaffold's automatic message, not a submitted flag answered by an injected reply. So it cannot stand in for the positive control.
+- **Context only, not a control:** in the main run, DeepSeek cheated in 31–49% of episodes with an answered flag (see the exploratory table under "Main run: results"). That channel is different: a flag written as text and answered by the scaffold's automatic message, not a submitted flag answered by an injected reply. So it cannot stand in for the positive control.
 - **Predictions:**
   - 1, more cheating after the authorising reply: not shown for either model.
   - 2, near-zero cheating after the neutral reply: holds, with 0/39 and 1/18.
